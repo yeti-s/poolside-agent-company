@@ -32,14 +32,6 @@ openclaw/
 - [Gateway 연동](./gateway-integration.md) — Gateway와의 통신, 세션 매핑, 이벤트 변환
 - [IDE 설정](./ide-setup.md) — Zed, Claude Code 등 IDE 통합 방법
 
-## 목차
-
-- [개요](./overview.md) — ACP의 역할, 아키텍처, 핵심 개념
-- [CLI 명령어](./cli-commands.md) — `openclaw acp` 명령어와 옵션
-- [프로토콜 상세](./protocol.md) — ACP API 엔드포인트, 메시지 구조, 세션 관리
-- [Gateway 연동](./gateway-integration.md) — Gateway와의 통신, 세션 매핑, 이벤트 변환
-- [IDE 설정](./ide-setup.md) — Zed, Claude Code 등 IDE 통합 방법
-
 ## 빠른 시작
 
 1. Gateway 실행 (로컬 또는 원격)
