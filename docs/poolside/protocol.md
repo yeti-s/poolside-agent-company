@@ -266,7 +266,80 @@ Gateway 세션 목록을 반환합니다 (IDE 세션 피커용).
 모든 메시지는 NDJSON (Newline-Delimited JSON) 형식입니다.
 각 JSON 객체는 새 줄로 분리됩니다.
 
-에러 처리:
-- Gateway 연결 끊김: 모든 보류 중인 프롬프트가 에러로.reject
-- 세션 없음: `Session <id> not found` 에러
-- 도구 실패: `tool_call_update`에서 `status: "failed"`
+---
+
+## 에러 처리 (Error Handling)
+
+### Gateway 연결 끊김
+
+```
+Gateway disconnected: <reason>
+```
+
+- 모든 보류 중인 프롬프트가 에러로 reject됩니다.
+- 세션 스토어의 활성 실행이 정리됩니다.
+- `AcpGatewayAgent.handleGatewayDisconnect()`에서 처리됩니다.
+
+### 세션 관련 에러
+
+| 시나리오 | 에러 메시지 |
+|---|---|
+| 세션 없음 | `Session <id> not found` |
+| 세션 키 없음 | `Session key not found: <key>` |
+| 세션 라벨 해결 실패 | `Unable to resolve session label: <label>` |
+| requireExisting + 세션 없음 | `Session key not found: <key>` |
+
+### 도구 실패
+
+`tool_call_update`에서 `status: "failed"`로 반환됩니다.
+
+```json
+{
+  "sessionUpdate": "tool_call_update",
+  "toolCallId": "...",
+  "status": "failed",
+  "rawOutput": { "error": "Command not found" }
+}
+```
+
+### 프롬프트 실패
+
+| Gateway 상태 | ACP stopReason |
+|---|---|
+| `complete` | `end_turn` |
+| `aborted` | `cancelled` |
+| `error` | `refusal` |
+
+### 프롬프트 타임아웃
+
+`_meta.timeoutMs`로 타임아웃을 설정할 수 있습니다. 타임아웃 초과 시 Gateway가 `aborted` 상태로 전환되고 ACP는 `cancelled`로 처리됩니다.
+
+---
+
+## 인증 플로우 (Auth Flow)
+
+### 인증 해결 우선순위
+
+```
+1. CLI 플래그 (--url, --token, --password)
+2. 설정 파일 (gateway.remote.*)
+3. 환경 변수 (OPENCLAW_GATEWAY_TOKEN, OPENCLAW_GATEWAY_PASSWORD)
+```
+
+### 인증 흐름
+
+```
+CLI 플래그 → 설정 파일 → 환경 변수 → Gateway 인증
+    ↓
+GatewayClient 생성 (token/password)
+    ↓
+WebSocket 연결 → auth 검증
+    ↓
+성공 → onHelloOk → handleGatewayReconnect()
+실패 → onClose → handleGatewayDisconnect()
+```
+
+### 인증 방법
+
+OpenClaw ACP는 현재 `authMethods: []` (인증 방법 없음)을 반환합니다.
+Gateway 인증은 `GatewayClient`가 담당하며, ACP 브릿지는 Gateway의 인증 상태를 투명하게 전달합니다.

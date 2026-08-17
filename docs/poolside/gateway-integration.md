@@ -181,3 +181,25 @@ type AcpSession = {
 - ACP 실행은 취소할 수 있으며, 활성 실행 ID는 세션별로 추적됩니다.
 - Gateway 재연결 시 `handleGatewayReconnect()`가 호출됩니다.
 - Gateway 끊김 시 모든 보류 중인 프롬프트가 에러로 reject됩니다.
+
+---
+
+## Rate Limiting (속도 제한)
+
+### Gateway 레벨
+
+Gateway가 속도 제한을 적용합니다. ACP 브릿지는 Gateway의 응답을 통해 속도 제한을 감지합니다.
+
+- Gateway가 429 Too Many Requests를 반환하면, ACP 브릿지는 에러를 프롬프트 reject로 전달합니다.
+- 클라이언트는 `timeoutMs`를 설정하여 프롬프트 타임아웃을 관리할 수 있습니다.
+
+### 세션 레벨
+
+- 각 세션당 하나의 활성 실행만 허용됩니다.
+- 새 프롬프트가 오면 기존 활성 실행이 자동으로 취소됩니다.
+- `cancel()`을 명시적으로 호출하여 실행을 취소할 수 있습니다.
+
+### 메모리 제한
+
+- 세션 스토어는 인메모리입니다. 브릿지 재시작 시 모든 세션 정보가 손실됩니다.
+- Gateway 세션은 영구 저장되므로, 재연결 시 `loadSession()`으로 복원할 수 있습니다.
