@@ -107,3 +107,87 @@ Gateway 인증은 다음 순서로 해결됩니다:
 1. CLI 플래그 (`--url`, `--token`, `--password`)
 2. 설정 (`gateway.remote.*`)
 3. 환경 변수 (`OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`)
+
+```
+CLI 플래그 → 설정 파일 → 환경 변수 → Gateway 인증
+    ↓
+GatewayClient 생성 (token/password)
+    ↓
+WebSocket 연결 → auth 검증
+    ↓
+성공 → onHelloOk → handleGatewayReconnect()
+실패 → onClose → handleGatewayDisconnect()
+```
+
+OpenClaw ACP는 현재 `authMethods: []` (인증 방법 없음)을 반환합니다.
+Gateway 인증은 `GatewayClient`가 담당하며, ACP 브릿지는 Gateway의 인증 상태를 투명하게 전달합니다.
+
+---
+
+## 에러 처리
+
+### Gateway 연결 끊김
+
+```
+Gateway disconnected: <reason>
+```
+
+- 모든 보류 중인 프롬프트가 에러로 reject됩니다.
+- 세션 스토어의 활성 실행이 정리됩니다.
+- `AcpGatewayAgent.handleGatewayDisconnect()`에서 처리됩니다.
+
+### 세션 관련 에러
+
+| 시나리오 | 에러 메시지 |
+|---|---|
+| 세션 없음 | `Session <id> not found` |
+| 세션 키 없음 | `Session key not found: <key>` |
+| 세션 라벨 해결 실패 | `Unable to resolve session label: <label>` |
+| requireExisting + 세션 없음 | `Session key not found: <key>` |
+
+### 도구 실패
+
+`tool_call_update`에서 `status: "failed"`로 반환됩니다.
+
+```json
+{
+  "sessionUpdate": "tool_call_update",
+  "toolCallId": "...",
+  "status": "failed",
+  "rawOutput": { "error": "Command not found" }
+}
+```
+
+### 프롬프트 실패
+
+| Gateway 상태 | ACP stopReason |
+|---|---|
+| `complete` | `end_turn` |
+| `aborted` | `cancelled` |
+| `error` | `refusal` |
+
+### 프롬프트 타임아웃
+
+`_meta.timeoutMs`로 타임아웃을 설정할 수 있습니다. 타임아웃 초과 시 Gateway가 `aborted` 상태로 전환되고 ACP는 `cancelled`로 처리됩니다.
+
+---
+
+## Rate Limiting (속도 제한)
+
+### Gateway 레벨
+
+Gateway가 속도 제한을 적용합니다. ACP 브릿지는 Gateway의 응답을 통해 속도 제한을 감지합니다.
+
+- Gateway가 429 Too Many Requests를 반환하면, ACP 브릿지는 에러를 프롬프트 reject로 전달합니다.
+- 클라이언트는 `timeoutMs`를 설정하여 프롬프트 타임아웃을 관리할 수 있습니다.
+
+### 세션 레벨
+
+- 각 세션당 하나의 활성 실행만 허용됩니다.
+- 새 프롬프트가 오면 기존 활성 실행이 자동으로 취소됩니다.
+- `cancel()`을 명시적으로 호출하여 실행을 취소할 수 있습니다.
+
+### 메모리 제한
+
+- 세션 스토어는 인메모리입니다. 브릿지 재시작 시 모든 세션 정보가 손실됩니다.
+- Gateway 세션은 영구 저장되므로, 재연결 시 `loadSession()`으로 복원할 수 있습니다.
